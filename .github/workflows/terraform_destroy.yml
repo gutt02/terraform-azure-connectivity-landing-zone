@@ -1,0 +1,139 @@
+name: 'Terraform Destroy'
+
+on:
+  workflow_dispatch:
+    branches: [ "main" ]
+    inputs:
+      workflow_environemt:
+        description: 'Workflow Environment'
+        required: true
+        default: 'visual-studio-enterprise'
+
+permissions:
+  contents: read
+
+env:
+  plan_file: destroy.tfplan
+
+jobs:
+  plan:
+    name: 'Terraform Plan'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.workflow_environemt }}
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Configure github
+    # https://wahlnetwork.com/2020/08/11/using-private-git-repositories-as-terraform-modules/
+    # The Workflow Token GITHUB_TOKEN does not have permissions to other repositories
+    - name: Configure GitHub
+      run: git config --global url."https://oauth2:${{ secrets.TF_GITHUB_TOKEN }}@github.com".insteadOf https://github.com
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init
+      env:  
+        ARM_CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.TENANT_ID }}
+        TF_CLI_ARGS_init: '-backend-config=resource_group_name=${{ vars.STATE_RESOURCE_GROUP_NAME }} -backend-config=storage_account_name=${{ vars.STATE_STORAGE_ACCOUNT_NAME }} -backend-config=container_name=${{ vars.STATE_CONTAINER_NAME }} -backend-config=key=${{ vars.STATE_KEY }}'
+        TF_VAR_client_secret: ${{ secrets.CLIENT_SECRET }}
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    - name: Terraform Format
+      run: terraform fmt -check
+
+    # Generates an execution plan for Terraform
+    - name: Terraform Plan Destroy
+      run: terraform plan -destroy -input=false -out=${{ env.plan_file }}
+      env:
+        ARM_CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.TENANT_ID }}
+        TF_CLI_ARGS_plan: '-var-file=./environments/${{ vars.STATE_ENV }}.tfvars'
+        TF_VAR_client_secret: ${{ secrets.CLIENT_SECRET }}
+
+    - name: Upload Terraform plan file
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.plan_file }}
+        path: ${{ env.plan_file }}
+        retention-days: 1
+
+  destroy:
+    name: 'Terraform Destroy'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.workflow_environemt }}
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Configure github
+    # https://wahlnetwork.com/2020/08/11/using-private-git-repositories-as-terraform-modules/
+    # The Workflow Token GITHUB_TOKEN does not have permissions to other repositories
+    - name: Configure GitHub
+      run: git config --global url."https://oauth2:${{ secrets.TF_GITHUB_TOKEN }}@github.com".insteadOf https://github.com
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init
+      env:  
+        ARM_CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.TENANT_ID }}
+        TF_CLI_ARGS_init: '-backend-config=resource_group_name=${{ vars.STATE_RESOURCE_GROUP_NAME }} -backend-config=storage_account_name=${{ vars.STATE_STORAGE_ACCOUNT_NAME }} -backend-config=container_name=${{ vars.STATE_CONTAINER_NAME }} -backend-config=key=${{ vars.STATE_KEY }}'
+        TF_VAR_client_secret: ${{ secrets.CLIENT_SECRET }}
+
+    - name: Download Terraform plan file
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ env.plan_file }}
+
+    - name: Terraform Show
+      run: terraform show ${{ env.plan_file }}
+
+    - name: Terraform Apply Destroy
+      run: terraform apply -input=false ${{ env.plan_file }}
+      env:
+        ARM_CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.TENANT_ID }}
+        TF_VAR_client_secret: ${{ secrets.CLIENT_SECRET }}
+
+      # On push to "main", build or change infrastructure according to Terraform configuration files
+      # Note: It is recommended to set up a required "strict" status check in your repository for "Terraform Cloud". See the documentation on "strict" required status checks for more information: https://help.github.com/en/github/administering-a-repository/types-of-required-status-checks
+    # - name: Terraform Apply
+    #   if: github.ref == 'refs/heads/"main"' && github.event_name == 'push'
+    #   run: terraform apply -auto-approve -input=false
