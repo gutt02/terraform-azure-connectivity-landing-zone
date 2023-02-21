@@ -176,7 +176,7 @@ variable "tags" {
     contact     = "contact@me"
     customer    = "Azure Cloud"
     environment = "Visual Studio Enterprise"
-    project     = "Infrastructure as Code"
+    project     = "Hub"
   }
 
   description = "Default tags for resources, only applied to resource groups"

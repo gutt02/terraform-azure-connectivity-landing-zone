@@ -1,6 +1,5 @@
 terraform {
-  backend "azurerm" {
-  }
+  backend "azurerm" {}
 
   required_providers {
     azurerm = {
@@ -130,17 +129,6 @@ resource "azurerm_subnet" "dnspr_outbound" {
     ]
   }
 }
-
-# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_network_peering
-# resource "azurerm_virtual_network_peering" "this" {
-#   count = var.adp_vnet_id != null ? 1 : 0
-
-#   name                      = "${var.project.customer}-${var.project.name}-adp-vnet-vnetpeer"
-#   resource_group_name       = azurerm_resource_group.this.name
-#   virtual_network_name      = azurerm_virtual_network.this.name
-#   remote_virtual_network_id = var.adp_vnet_id
-#   allow_gateway_transit     = true
-# }
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_security_group
 resource "azurerm_network_security_group" "dnspr_inbound" {
