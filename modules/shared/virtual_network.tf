@@ -1,6 +1,6 @@
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group
 resource "azurerm_resource_group" "this" {
-  name     = "${var.project.customer}-${var.project.name}-${var.project.environment}-rg-net"
+  name     = "${var.project.customer}-${var.project.name}-${var.project.environment}-rg-network"
   location = var.location
   tags     = var.tags
 }
@@ -115,7 +115,6 @@ resource "azurerm_network_security_group" "dnspr_outbound" {
   location            = var.location
   resource_group_name = azurerm_resource_group.this.name
 }
-
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet_network_security_group_association
 resource "azurerm_subnet_network_security_group_association" "dnspr_inbound" {
