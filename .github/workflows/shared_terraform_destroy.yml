@@ -1,0 +1,113 @@
+name: "Shared - Terraform Destroy"
+
+on:
+  workflow_dispatch:
+    branches: [ "main" ]
+    inputs:
+      workflow_environemt:
+        description: 'Workflow Environment'
+        required: true
+        default: 'visual-studio-enterprise'
+
+permissions:
+  contents: read
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.TENANT_ID }}
+  PLAN_FILE: shared.tfplan
+  STATE_KEY: ${{ vars.PROJECT_CUSTOMER }}-${{ vars.PROJECT_NAME }}-${{ vars.PROJECT_ENVIRONMENT }}-shared.tfstate
+  WORKING_DIRECTORY: ./src/terraform/modules/shared
+
+jobs:
+  plan:
+    name: 'Terraform Plan Destroy'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.workflow_environemt }}
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+        # required for terraform output
+        terraform_wrapper: false
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: |
+        export TF_CLI_ARGS_init="-backend-config=resource_group_name=${{ vars.STATE_RESOURCE_GROUP_NAME }} -backend-config=storage_account_name=${{ vars.STATE_STORAGE_ACCOUNT_NAME }} -backend-config=container_name=${{ vars.STATE_CONTAINER_NAME }} -backend-config=key=${{ env.STATE_KEY }}"
+        terraform init
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    - name: Terraform Format
+      run: terraform fmt -check
+
+    # Generates an execution plan for Terraform
+    - name: Terraform Plan
+      run:
+        export TF_VAR_agent_ip=${{ env.AGENT_IP }}
+        export TF_VAR_client_ip='{"name":"ClientIP01","cidr":"${{ inputs.CLIENT_IP }}/32","start_ip_address":"${{ inputs.CLIENT_IP }}","end_ip_address":"${{ inputs.CLIENT_IP }}"}'
+        export TF_VAR_client_secret=${{ secrets.CLIENT_SECRET }}
+        export TF_VAR_user_object_id=${{ secrets.USER_OBJECT_ID }}
+        terraform plan -destroy -input=false -var=location=${{ inputs.LOCATION }} -var=client_ip=$TF_VAR_client_ip -out=${{ env.PLAN_FILE }}
+
+    - name: Upload Terraform plan file
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.plan_file }}
+        path: ${{ env.plan_file }}
+        retention-days: 1
+
+  apply:
+    name: 'Terraform Apply Destroy'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.workflow_environemt }}
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: |
+        export TF_CLI_ARGS_init="-backend-config=resource_group_name=${{ vars.STATE_RESOURCE_GROUP_NAME }} -backend-config=storage_account_name=${{ vars.STATE_STORAGE_ACCOUNT_NAME }} -backend-config=container_name=${{ vars.STATE_CONTAINER_NAME }} -backend-config=key=${{ env.STATE_KEY }}"
+        terraform init
+
+    - name: Download Terraform plan file
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ env.plan_file }}
+
+    - name: Terraform Show
+      run: terraform show ${{ env.plan_file }}
+
+    - name: Terraform Apply
+      run: terraform apply -input=false ${{ env.plan_file }}
