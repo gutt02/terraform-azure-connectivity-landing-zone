@@ -92,7 +92,7 @@ variable "project" {
   default = {
     customer    = "azc"
     name        = "clz"
-    environment = "vse"
+    environment = "acf"
   }
 
   description = "Project details, like customer name, environment, etc."
