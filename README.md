@@ -163,7 +163,7 @@ variable "tags" {
     project     = "clz"
   }
 
-  description = "Default tags for resources, only applied to resource groups"
+  description = "Default tags for resources, only applied to resource groups."
 }
 ```
 
